@@ -1,0 +1,695 @@
+
+
+## Importing necessary libraries and data
+"""
+
+# Installing the libraries with the specified version.
+# uncomment and run the following line if Google Colab is being used
+!pip install scikit-learn==1.2.2 seaborn==0.13.1 matplotlib==3.7.1 numpy==1.25.2 pandas==1.5.3 yellowbrick==1.5 -q --user
+
+# Installing the libraries with the specified version.
+# uncomment and run the following lines if Jupyter Notebook is being used
+!pip install scikit-learn==1.2.2 seaborn==0.13.1 matplotlib==3.7.1 numpy==1.25.2 pandas==1.5.2 yellowbrick==1.5 -q --user
+!pip install --upgrade -q jinja2
+
+"""**Note**: *After running the above cell, kindly restart the notebook kernel and run all cells sequentially from the start again.*"""
+
+# Libraries to help with reading and manipulating data
+import numpy as np
+import pandas as pd
+
+# Libraries to help with data visualization
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+sns.set_theme(style='darkgrid')
+
+# Removes the limit for the number of displayed columns
+pd.set_option("display.max_columns", None)
+# Sets the limit for the number of displayed rows
+pd.set_option("display.max_rows", 200)
+
+# to scale the data using z-score
+from sklearn.preprocessing import StandardScaler
+
+# to compute distances
+from scipy.spatial.distance import cdist, pdist
+
+# to perform k-means clustering and compute silhouette scores
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+
+# to visualize the elbow curve and silhouette scores
+from yellowbrick.cluster import KElbowVisualizer, SilhouetteVisualizer
+
+# to perform hierarchical clustering, compute cophenetic correlation, and create dendrograms
+from sklearn.cluster import AgglomerativeClustering
+from scipy.cluster.hierarchy import dendrogram, linkage, cophenet
+
+# to suppress warnings
+import warnings
+warnings.filterwarnings("ignore")
+
+# importing drive and mounting it
+from google.colab import drive
+drive.mount('/content/drive')
+
+# creating path for colab to access dataset
+path = '/content/drive/MyDrive/stock_data.csv'
+data = pd.read_csv(path)
+
+# checking first five rows of data set
+data.head()
+
+# checking last five rows of data set
+data.tail()
+
+"""## Data Overview
+
+- Observations
+- Sanity checks
+"""
+
+# Checking total number of rows and columns
+data.shape
+
+# checking info of data set
+data.info()
+
+# Checking description of data set
+data.describe(include='all').T
+
+# checking data types of all variables
+data.dtypes
+
+# Checking for null values
+data.isnull().sum()
+
+# Checking for duplicated values
+data.duplicated().sum()
+
+# Checking unique values
+data.nunique()
+
+# copying dataframe
+df = data.copy()
+
+## Exploratory Data Analysis (EDA)
+
+- EDA is an important part of any project involving data.
+- It is important to investigate and understand the data better before building a model with it.
+- A few questions have been mentioned below which will help you approach the analysis in the right manner and generate insights from the data.
+- A thorough analysis of the data, in addition to the questions mentioned below, should be done.
+
+**Questions**:
+
+1. What does the distribution of stock prices look like?
+2. The stocks of which economic sector have seen the maximum price increase on average?
+3. How are the different variables correlated with each other?
+4. Cash ratio provides a measure of a company's ability to cover its short-term obligations using only cash and cash equivalents. How does the average cash ratio vary across economic sectors?
+5. P/E ratios can help determine the relative value of a company's shares as they signify the amount of money an investor is willing to invest in a single share of a company per dollar of its earnings. How does the P/E ratio vary, on average, across economic sectors?
+
+**Univariate Analysis:**
+"""
+
+# plotting barplot for each columns in data
+col = ['Ticker Symbol', 'Security', 'GICS Sector', 'GICS Sub Industry', 'Current Price', 'Price Change', 'Volatility', 'ROE', 'Cash Ratio', 'Net Cash Flow', 'Net Income', 'Earnings Per Share', 'Estimated Shares Outstanding', 'P/E Ratio', 'P/B Ratio']
+
+import textwrap
+
+for i, variable in enumerate(col):
+    plt.figure(figsize=(10, 8))
+    value_counts = data[variable].value_counts().nlargest(10)
+    labels = [textwrap.fill(str(label), 30) for label in value_counts.index]  # wrap text to 30 chars
+
+    sns.barplot(y=labels, x=value_counts.values)
+    plt.title(variable)
+    plt.xlabel("Count")
+    plt.ylabel(variable)
+    plt.tight_layout()
+    plt.show()
+
+"""1. **How does the distribution of stock prices look like?**"""
+
+# Plotting histplot for current price
+sns.histplot(x='Current Price', data=df);
+
+"""**Observation: The distribution of stock prices looks like right skewed distribution**
+
+**Overall Observation of Univariate Analysis:**
+
+1. The following variables: GICS Sector, GICS Sub Industry, Current Price, ROE, Cash Ratio, Net Cash Flow, Net Income, Earnings per Share, Estimated Shares Outstanding, P/E Ratio, and P/B Ratio shows right skewed distribution.
+
+2. Variables other than above listed variables shows no pattern in distribution, it was equally distributed.
+
+**Bivariate Analysis: **
+
+**2. The Stocks of which economic sector have seen the maximum price increase on average?**
+"""
+
+# Group by 'GICS Sector' and calculate average 'Price Change'
+avg_price_change_by_sector = data.groupby('GICS Sector')['Price Change'].mean() # Assign the result to a variable
+
+plt.figure(figsize=(12, 6))
+sns.barplot(x=avg_price_change_by_sector.index, y=avg_price_change_by_sector.values) # Use the variable here
+plt.xticks(rotation=45, ha='right')
+plt.ylabel('Average Price Change')
+plt.title('Average Price Change by Economic Sector')
+plt.tight_layout()
+plt.show()
+
+"""Observation: The sector with the highest average price increase is 'Health Care' with an average increase of 9.59.
+
+**3. How are different variables correlated with each other?**
+"""
+
+# assigning numeric columns for heatmap
+numeric_cols =['Current Price', 'Price Change', 'Volatility', 'ROE', 'Cash Ratio', 'Net Cash Flow', 'Net Income', 'Earnings Per Share', 'Estimated Shares Outstanding', 'P/E Ratio', 'P/B Ratio']
+sns.heatmap(df[numeric_cols].corr(), annot=True, vmin=-1, vmax=1, cmap='Blues');
+
+"""Observation:
+
+1. Net Income is directly proportional to Earnings per Share and Estimated Share Outstanding. As Net income of the company increases, its earning per share increases which means every shareholders benefits from it as well as Estimated Share Outstanding also increases
+
+2. As Net income increases P/E Ratio, P/B Ratio and Volatility decreases.
+
+3. Current Price is slightly proportional to Earnings per share which means increase in current price increases earnings per share
+
+4. Price Change is negatively proportional to volatility
+
+5. ROE is negatively proportional to Earnings per Share
+
+**4. Cash Ratio provides a measure of a company's ability to cover its short-term obligations using only cash and cash equivalents. How does the average cash ratio vary across economic sectors?**
+"""
+
+# creating new variable in data frame for averaging cash ratio
+avg_cash_ratio_by_sector = data.groupby('GICS Sector')['Cash Ratio'].mean()
+
+# Use avg_cash_ratio_by_sector as a variable, not as a column name within the DataFrame.
+data['avg_cash_ratio_by_sector'] = data['GICS Sector'].map(avg_cash_ratio_by_sector)
+
+# plotting barplot
+sns.barplot(x=data['GICS Sector'], y=data['avg_cash_ratio_by_sector'])
+plt.xticks(rotation=90);
+
+"""Observations:
+
+1. Information Technology Sector has highest cash ratio average which means it has higher chances to payoff short term debt with only cash and equivalents
+
+2. IT followed by Telecommunications Services Sector which has second highest Cash Ratio Average
+
+3. Healthcare and Financials becoming third and fourth having highest average cash ratio sector
+
+4. Utilities Sector has lowest average cash ratio which does not have higher chances of paying off short term debt with cash or cash equivalents.
+
+**5. P/E Ratio can help determine the relative value of a company's shares as they signify the amount of money an investor is willing to invest in a single share of a company per dollar of its earnings. How does the P/E Ratio vary, on average, across economic sectors?**
+"""
+
+# creating new variable in data frame for averaging P/E ratio
+avg_pe_ratio_by_sector = data.groupby('GICS Sector')['P/E Ratio'].mean()
+
+# Use avg_pe_ratio_by_sector as a variable, not as a column name within the DataFrame.
+data['avg_pe_ratio_by_sector'] = data['GICS Sector'].map(avg_pe_ratio_by_sector)
+
+# plotting barplot
+sns.barplot(x=data['GICS Sector'], y=data['avg_pe_ratio_by_sector'])
+plt.xticks(rotation=90);
+
+## Data Preprocessing
+
+- Duplicate value check
+- Missing value treatment
+- Outlier check
+- Feature engineering (if needed)
+- Any other preprocessing steps (if needed)
+
+**Outlier Check:**
+"""
+
+# checking numeric columns outliers
+plt.figure(figsize=(15, 12))
+
+numeric_columns = df.select_dtypes(include=np.number).columns.tolist()
+
+for i, variable in enumerate(numeric_columns):
+    plt.subplot(3, 4, i + 1)
+    plt.boxplot(df[variable], whis=1.5)
+    plt.tight_layout()
+    plt.title(variable)
+
+plt.show()
+
+
+**Feature Enginnering (Scaling Dataset):**
+"""
+
+# scaling the data before clustering
+scaler = StandardScaler()
+subset = df[['Current Price', 'Price Change', 'Volatility', 'ROE', 'Cash Ratio', 'Net Cash Flow', 'Net Income', 'Earnings Per Share', 'Estimated Shares Outstanding', 'P/E Ratio', 'P/B Ratio']]
+subset_scaled = scaler.fit_transform(subset)
+
+# creating a dataframe of the scaled data
+subset_scaled_df = pd.DataFrame(subset_scaled, columns=subset.columns)
+
+# Viewing first five rows of subset scaled df
+subset_scaled_df.head()
+
+"""## EDA
+
+- It is a good idea to explore the data once again after manipulating it.
+"""
+
+# performing EDA on scaled df
+# crafting pairplot for scaled data
+sns.pairplot(data=subset_scaled_df);
+
+# Plotting heatmap for scaled df
+plt.figure(figsize=(12, 10))
+sns.heatmap(subset_scaled_df.corr(), annot=True, vmin=-1, vmax=1, cmap='Blues');
+
+
+## K-means Clustering
+"""
+
+# copying df to perform K-means clustering
+k_means_df = subset_scaled_df.copy()
+
+# creating 15 clusters for the dataset of 340 rows
+clusters = range(1, 15)
+meanDistortions = []
+
+for k in clusters:
+    model = KMeans(n_clusters=k, random_state=1)
+    model.fit(subset_scaled_df)
+    prediction = model.predict(k_means_df)
+    distortion = (
+        sum(np.min(cdist(k_means_df, model.cluster_centers_, "euclidean"), axis=1))
+        / k_means_df.shape[0]
+    )
+
+    meanDistortions.append(distortion)
+
+    print("Number of Clusters:", k, "\tAverage Distortion:", distortion)
+
+plt.plot(clusters, meanDistortions, "bx-")
+plt.xlabel("k")
+plt.ylabel("Average Distortion")
+plt.title("Selecting k with the Elbow Method", fontsize=20)
+plt.show()
+
+"""Observations: The perfect elbow formation is forming on 6th , 7th and 8th clusters so either of them can be ideal for this dataset"""
+
+# visualizing the distortion score for particular cluster
+model = KMeans(random_state=1)
+visualizer = KElbowVisualizer(model, k=(1, 15), timings=True)
+visualizer.fit(k_means_df)
+visualizer.show();
+
+"""Observations:
+
+1. The graph shows that if we take number of clusters as 8, it will have lower distortion score which means good clarity and distinct formation of clusters. But, as we can see in the green line graph, it has high fit time means it can take time to run hence making it more computationally expenive
+
+2. On the other side, if we take number of clusters as 5, 6 or 7, though it has higher distortion than 8, but fit time is lesser which means it will not be computationally expensive
+
+3. Hence, we can decide to finalize clusters ranging between 5 to 8 for now.
+
+**Let's check silhoutte score for each selected number of clusters:**
+"""
+
+# Checking silhoutte score of clusters 2 to 14
+sil_score = []
+cluster_list = range(2, 15)
+for n_clusters in cluster_list:
+    clusterer = KMeans(n_clusters=n_clusters, random_state=1)
+    preds = clusterer.fit_predict((subset_scaled_df))
+    score = silhouette_score(k_means_df, preds)
+    sil_score.append(score)
+    print("For n_clusters = {}, the silhouette score is {})".format(n_clusters, score))
+
+plt.plot(cluster_list, sil_score)
+plt.show()
+
+"""Observations:
+
+1. From the above observations, we will decline the 7 number of clusters because it's silhoutte score is very less.
+
+2. Hence, we will consider moving forward with 5th, 6th and 8th number of clusters as the silhoutte score of both are reasonable.
+"""
+
+# checking silhoutte score with graphical visualizer
+model = KMeans(random_state=1)
+visualizer = KElbowVisualizer(model, k=(2, 15), metric="silhouette", timings=True)
+visualizer.fit(k_means_df)
+visualizer.show()
+
+
+# finding optimal no. of clusters with silhouette coefficients
+visualizer = SilhouetteVisualizer(KMeans(6, random_state=1))
+visualizer.fit(k_means_df)
+visualizer.show()
+
+# finding optimal no. of clusters with silhouette coefficients
+visualizer = SilhouetteVisualizer(KMeans(8, random_state=1))  ## Complete the code to visualize the silhouette scores for certain number of clusters
+visualizer.fit(k_means_df)
+visualizer.show()
+
+"""Observations:
+
+It is clear that 6 number of clusters will be ideal for the dataset as it has higher silhoutte score from above graphs so we will take 6 as final number of clusters and form final model.
+
+**Final K-Means model:**
+"""
+
+# final K-means model
+kmeans = KMeans(n_clusters=6, random_state=1)
+kmeans.fit(k_means_df)
+
+# creating a copy of the original data
+df1 = df.copy()
+
+# adding kmeans cluster labels to the original and scaled dataframes
+k_means_df["KM_segments"] = kmeans.labels_
+df1["KM_segments"] = kmeans.labels_
+
+"""**Cluster Profiling:**"""
+
+# grouping KM_segments with each variables
+km_cluster_profile = df1.groupby('KM_segments').agg({
+    'Current Price': 'mean',
+    'Price Change': 'mean',
+    'Volatility': 'mean',
+    'ROE': 'mean',
+    'Cash Ratio': 'mean',
+    'Net Cash Flow': 'mean',
+    'Net Income': 'mean',
+    'Earnings Per Share': 'mean',
+    'Estimated Shares Outstanding': 'mean',
+    'P/E Ratio': 'mean',
+    'P/B Ratio': 'mean'
+}) # Group by 'KM_segments' and calculate mean for numeric columns
+
+km_cluster_profile["count_in_each_segment"] = (
+    df1.groupby("KM_segments")["Security"].count().values # Group by 'KM_segments' column and get count
+)
+
+# highlighting the extreme values
+km_cluster_profile.style.highlight_max(color="lightgreen", axis=0)
+
+## print the companies in each cluster
+for cl in df1["KM_segments"].unique():
+    print("In cluster {}, the following companies are present:".format(cl))
+    print(df1[df1["KM_segments"] == cl]["Security"].unique())
+    print()
+
+# Grouping KM_segments with GICS Sector
+df1.groupby(["KM_segments", "GICS Sector"])['Security'].count()
+
+# plotting boxplot for numerical variables for each clusters
+num_col = df1.select_dtypes(include=np.number).columns.tolist()
+
+plt.figure(figsize=(15, 10))
+plt.suptitle("Boxplot of numerical variables for each cluster")
+
+for i, variable in enumerate(num_col):
+    # Updated subplot layout to 3 rows and 4 columns
+    plt.subplot(3, 4, i + 1)
+    sns.boxplot(data=df1, x="KM_segments", y=variable)
+
+plt.tight_layout(pad=2.0)
+
+
+## Hierarchical Clustering
+"""
+
+# copying dataset for hierarchical clustering
+hc_df = subset_scaled_df.copy()
+
+# list of linkage methods
+linkage_methods = ["single", "complete", "average", "weighted"] ## Complete the code to add linkages
+
+# Defining distance metrics
+distance_metrics = ["euclidean", "chebyshev", "mahalanobis", "cityblock"]
+
+high_cophenet_corr = 0
+high_dm_lm = [0, 0]
+
+for dm in distance_metrics:
+    for lm in linkage_methods:
+        Z = linkage(hc_df, metric=dm, method=lm)
+        c, coph_dists = cophenet(Z, pdist(hc_df))
+        print(
+            "Cophenetic correlation for {} distance and {} linkage is {}.".format(
+                dm.capitalize(), lm, c
+            )
+        )
+        if high_cophenet_corr < c:
+            high_cophenet_corr = c
+            high_dm_lm[0] = dm
+            high_dm_lm[1] = lm
+
+# printing the combination of distance metric and linkage method with the highest cophenetic correlation
+print('*'*100)
+print(
+    "Highest cophenetic correlation is {}, which is obtained with {} distance and {} linkage.".format(
+        high_cophenet_corr, high_dm_lm[0].capitalize(), high_dm_lm[1]
+    )
+)
+
+"""Observations: Highest cophenetic correlation is 0.94 which is obtained with Eucledian distance and average linkage
+
+**Let's check different linkage with eucledian distance:**
+
+**We will also add ward linkage because it only works under eucledian distance:**
+"""
+
+# list of linkage methods
+linkage_methods = ["single", "complete", "average", "weighted", "ward"]
+
+high_cophenet_corr = 0
+high_dm_lm = [0, 0]
+
+for lm in linkage_methods:
+    Z = linkage(hc_df, metric="euclidean", method=lm)
+    c, coph_dists = cophenet(Z, pdist(hc_df))
+    print("Cophenetic correlation for {} linkage is {}.".format(lm, c))
+    if high_cophenet_corr < c:
+        high_cophenet_corr = c
+        high_dm_lm[0] = "euclidean"
+        high_dm_lm[1] = lm
+
+# printing the combination of distance metric and linkage method with the highest cophenetic correlation
+print('*'*100)
+print(
+    "Highest cophenetic correlation is {}, which is obtained with {} linkage.".format(
+        high_cophenet_corr, high_dm_lm[1]
+    )
+)
+
+"""Observations: Average linkage outperformed with eucledian distance with highest cophenetic correlation of 0.94
+
+**Plot dendograms with different linkage methode and Eucledian distance:**
+"""
+
+# list of linkage methods
+linkage_methods = ["single", "complete", "average", "weighted","ward"]
+
+# lists to save results of cophenetic correlation calculation
+compare_cols = ["Linkage", "Cophenetic Coefficient"]
+compare = []
+
+# to create a subplot image
+fig, axs = plt.subplots(len(linkage_methods), 1, figsize=(15, 30))
+
+# We will enumerate through the list of linkage methods above
+# For each linkage method, we will plot the dendrogram and calculate the cophenetic correlation
+for i, method in enumerate(linkage_methods):
+    Z = linkage(hc_df, metric="euclidean", method=method)
+
+    dendrogram(Z, ax=axs[i])
+    axs[i].set_title(f"Dendrogram ({method.capitalize()} Linkage)")
+
+    coph_corr, coph_dist = cophenet(Z, pdist(hc_df))
+    axs[i].annotate(
+        f"Cophenetic\nCorrelation\n{coph_corr:0.2f}",
+        (0.80, 0.80),
+        xycoords="axes fraction",
+    )
+
+    compare.append([method, coph_corr])
+
+# create and print a dataframe to compare cophenetic correlations for different linkage methods
+df_cc = pd.DataFrame(compare, columns=compare_cols)
+df_cc = df_cc.sort_values(by="Cophenetic Coefficient")
+df_cc
+
+"""Observations: From above dendograms and cophenetic coefficient, it is clear that average linkage with eucledian distance outperformed because of their highest cophenetic coefficients. Other than that, from the dendogram of average linkage, it is pretty clear that 6 number of clusters might be the ideal clusters moving forwad with hierarchical clustering.
+
+**We will take 6 as a final number of clusters from above results for further clustering:**
+"""
+
+# Agglomerative clustering with 6 as number of clusters
+HCmodel = AgglomerativeClustering(n_clusters=6, metric="euclidean", linkage="average")
+HCmodel.fit(hc_df)
+
+# creating a copy of the original data
+df2 = df.copy()
+
+# adding hierarchical cluster labels to the original and scaled dataframes
+hc_df["HC_segments"] = HCmodel.labels_
+df2["HC_segments"] = HCmodel.labels_
+
+"""**Cluster Profiling:**"""
+
+# grouping HC segments with mean of each numerical variable
+hc_cluster_profile = df2.groupby('HC_segments').agg({
+    'Current Price': 'mean',
+    'Price Change': 'mean',
+    'Volatility': 'mean',
+    'ROE': 'mean',
+    'Cash Ratio': 'mean',
+    'Net Cash Flow': 'mean',
+    'Net Income': 'mean',
+    'Earnings Per Share': 'mean',
+    'Estimated Shares Outstanding': 'mean',
+    'P/E Ratio': 'mean',
+    'P/B Ratio': 'mean'
+})
+hc_cluster_profile["count_in_each_segment"] = df2.groupby("HC_segments")["Security"].count().values
+
+# Highlighting the extreme values
+hc_cluster_profile.style.highlight_max(color="lightgreen", axis=0)
+
+# Print the companies in each cluster
+for cl in df2["HC_segments"].unique():
+    print("In cluster {}, the following companies are present:".format(cl))
+    print(df2[df2["HC_segments"] == cl]["Security"].unique())
+    print()
+
+# Grouping sector falling in particular clusters
+df2.groupby(["HC_segments", "GICS Sector"])['Security'].count()
+
+# plotting boxplot for each variable to see how much in which segments they are falling
+plt.figure(figsize=(20, 20))
+plt.suptitle("Boxplot of numerical variables for each cluster")
+num_col = df2.select_dtypes(include=np.number).columns.tolist() #Selecting only numeric columns for boxplot
+
+for i, variable in enumerate(num_col):
+    plt.subplot(3, 4, i + 1)
+    sns.boxplot(data=df2, x="HC_segments", y=variable)
+
+plt.tight_layout(pad=2.0)
+
+
+# **Let's try with ward linkage and from the dendogram, ward linkage also shows 6 as ideal clusters**
+
+**Cluster profiling with ward linkage:**
+"""
+
+# Agglomerative clustering with 6 as number of clusters
+HCmodel_ward = AgglomerativeClustering(n_clusters=6, metric="euclidean", linkage="ward")
+HCmodel_ward.fit(hc_df)
+
+# creating a copy of the original data
+df3 = df.copy()
+
+# adding hierarchical cluster labels to the original and scaled dataframes
+hc_df["HC_segments_ward"] = HCmodel_ward.labels_
+df3["HC_segments_ward"] = HCmodel_ward.labels_
+
+# grouping HC segments with mean of each numerical variable
+hc_cluster_profile_ward = df3.groupby('HC_segments_ward').agg({
+    'Current Price': 'mean',
+    'Price Change': 'mean',
+    'Volatility': 'mean',
+    'ROE': 'mean',
+    'Cash Ratio': 'mean',
+    'Net Cash Flow': 'mean',
+    'Net Income': 'mean',
+    'Earnings Per Share': 'mean',
+    'Estimated Shares Outstanding': 'mean',
+    'P/E Ratio': 'mean',
+    'P/B Ratio': 'mean'
+})
+hc_cluster_profile_ward["count_in_each_segment_ward"] = df3.groupby("HC_segments_ward")["Security"].count().values
+
+# Highlighting the extreme values
+hc_cluster_profile_ward.style.highlight_max(color="lightgreen", axis=0)
+
+# Print the companies in each cluster
+for cl in df3["HC_segments_ward"].unique():
+    print("In cluster {}, the following companies are present:".format(cl))
+    print(df3[df3["HC_segments_ward"] == cl]["Security"].unique())
+    print()
+
+# Grouping sector falling in particular clusters
+df3.groupby(["HC_segments_ward", "GICS Sector"])['Security'].count()
+
+# plotting boxplot for each variable to see how much in which segments they are falling
+plt.figure(figsize=(20, 20))
+plt.suptitle("Boxplot of numerical variables for each cluster")
+num_col = df3.select_dtypes(include=np.number).columns.tolist() #Selecting only numeric columns for boxplot
+
+for i, variable in enumerate(num_col):
+    plt.subplot(3, 4, i + 1)
+    sns.boxplot(data=df3, x="HC_segments_ward", y=variable)
+
+plt.tight_layout(pad=2.0)
+
+
+**Difference between Average Linkage and Ward Linkage from above observation:**
+
+**Average Linkage:**
+1. More granular clusters — good at picking out companies that are extremely good or extremely bad.
+
+2. Better if you're analyzing niche opportunities or specific companies worth exploring further.
+
+3. Investment-wise: Great for highlighting extremes (both positive and negative).
+
+**Ward Linkage:**
+1. More stable and balanced clusters, each with stronger internal similarity.
+
+2. Better suited for identifying groups of companies with consistent performance, making investment decisions more scalable.
+
+3. Investment-wise: Great for finding reliable clusters with low internal variation.
+
+**Hence, Ward Linkage gave better results by forming more stable and balanced clusters**
+
+## K-means vs Hierarchical Clustering
+
+You compare several things, like:
+- Which clustering technique took less time for execution?
+- Which clustering technique gave you more distinct clusters, or are they the same?
+- How many observations are there in the similar clusters of both algorithms?
+- How many clusters are obtained as the appropriate number of clusters from both algorithms?
+
+You can also mention any differences or similarities you obtained in the cluster profiles from both the clustering techniques.
+
+# **Overall differences between K-means and Hierarchical clustering techniques (Average + Ward Linkage) from above observations: **
+
+1. KMeans clustering technique took less time for execution than Hierarchical clustering because KMeans is usually good with execution of larger dataset.
+
+2. KMeans clustering technique gave more distinct clusters as we can see from the observation, Cluster 4 is most profitable and attractive where as cluster 1 and 2 is more riskier as well as Cluster 5 is attractive but riskier at the same time. On the other side, Hierarchical clustering seems to make patterns harder to conclude due to imbalanced clustering.
+
+3. KMeans clustering has most profitable cluster 4 in which total count is 25 where as in ward linkage cluster 2 is very profitable with count 23 which is close. In KMeans, cluster 0 with 274 count gave average rankings similarly in ward linkage, cluster 3 with 275 gave average rankings. In KMeans, the risky cluster was 1 with 27 counts where as in ward linkage risky cluster was 1 with 7 counts which is not very close though.
+Technically, total number of 310 counts obtained to be assigned to similar clusters between KMeans and Hierarchical clustering
+
+4. KMeans and Hierarchical clustering both obtained 6 as an ideal number of clusters for this dataset
+
+Hence, KMeans clustering gave clear differences among the sectors through clustering. It gave strong results by dividing sectors into clusters which shows clear differences among most profit making, average profit making as well as loss making companies.
+
+Whereas, Hierarchical clustering techniques were imbalanced especially average linkage. Average Linkage did not give clear differences hence it gave more complex results by forming improper clusters. On the other side, Ward linkage method is known for balanced data clustering, so it gave more balanced clusters than averag linkage.
+
+**Conclusion:** KMeans Clustering should be used for getting more balanced and clear clusters as well as we also can use ward linkage method for better clustering using hierarchical technique.
+
+## Actionable Insights and Recommendations
+
+1. Cluster 4 (healthcare, IT, Fincance etc) in KMeans and Cluster 2 (consists of Health care, IT, Finance sector etc) in Ward Linkage are high performing cluster group. The companies falling under these clusters are high profit making and can turn out highly profitable for investors.
+
+2. KMeans Cluster 1 and Ward Linkage cluster 1 and 4 shows financial distress. This includes Energy sector, few finance and IT sector as well. Investors must avoid or invest with caution into the companies falling under this clusters.
+
+3. KMeans Cluster 2 includes Energy sectors is good for long term investments due to high ROE but negative net income. The companies could be on early growth phase at the moment.
+
+4. Companies under cluster 5 in KMeans tends to be overvalued due to high P/E ratio but less P/B ratio. Investors should consider this only for short term gains and monitor regularly the trends of the company.
+
+5. Investors should focus on Cash Ratio and Net cash flow of the companies, if those metrics are high, then investors can invest because companies are more prone to payoff short term debts with their liquid assets even though they are making reasonable profits. Such as Cluster 4 in KMeans clustering is investable.
+"""
